@@ -1,0 +1,12 @@
+# Data
+Data/Raw/*
+Data/Processed/*
+!Data/Processed/full_df.parquet
+
+# Presentation images
+images/
+
+# Misc
+.vscode/
+*.sqlite*
+.cache/
