@@ -43,7 +43,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import joblib
-from utils import simulate_future, forecast_bioshocks
+from utils import simulate_future, forecast_bioshocks, simulate_with_uncertainty
 
 # %%
 # Load data
@@ -112,46 +112,40 @@ scenario = selected_scenario
 # -----------------------------
 if st.button("Predict"):
 
-    st.subheader("Running simulation...")
+    st.subheader("Running Monte Carlo simulation...")
 
-    # 1. simulate future climate + features
-    future_df = simulate_future(
-        df=full_df.loc[full_df['state']==selected_state],
+    historic_yearly = (
+    full_df[full_df["state"] == selected_state]
+    .groupby("year")["biodiversity_anomaly_sensitive"]
+    .sum()
+    .reset_index()
+    .rename(columns={"biodiversity_anomaly_sensitive": "n_anomalies"})
+)
+
+    # 1. run uncertainty simulation
+    result = simulate_with_uncertainty(
+        df = full_df,
+        state=selected_state,
+        scenario=scenario,
         features = features,
-        scenario=scenario
+        model=model,
+        threshold = threshold,
+        n_runs=100
     )
 
-    # 2. predict anomalies
-    preds = forecast_bioshocks(
-        df = future_df,
-        model = model,
-        features = features,
-        threshold = threshold
-    )
+    last_hist_year = historic_yearly["year"].max()
+
+    result["year"] = result["year"] + last_hist_year
+
+    total = result["mean_anomalies"].sum()
 
     # -----------------------------
-    # 3. Aggregate per year
-    # -----------------------------
-    yearly = (
-        preds.groupby("year")["biodiversity_anomaly"]
-        .sum()
-        .reset_index()
-    )
-
-    yearly.rename(
-        columns={"biodiversity_anomaly": "n_anomalies"},
-        inplace=True
-    )
-
-    total = yearly["n_anomalies"].sum()
-
-    # -----------------------------
-    # 4. Output text
+    # Output text
     # -----------------------------
     st.subheader("Results")
 
     st.write(
-        f"**Total predicted anomaly months (10 years): {int(total)}**"
+        f"**Expected anomaly months (10 years): {total:.1f} ± {result['std_anomalies'].sum():.1f}**"
     )
 
     st.write(
@@ -159,28 +153,141 @@ if st.button("Predict"):
     )
 
     # -----------------------------
-    # 5. Plot
+    # Plot with uncertainty band
     # -----------------------------
-    fig, ax = plt.subplots()
+    import matplotlib.pyplot as plt
 
+    fig, ax = plt.subplots(figsize=(10,5))
+
+    # -----------------------------
+    # HISTORICAL DATA
+    # -----------------------------
     ax.plot(
-        yearly["year"],
-        yearly["n_anomalies"],
-        marker="o"
+        historic_yearly["year"],
+        historic_yearly["n_anomalies"],
+        marker="o",
+        label="Observed (historical)",
+        color="black"
     )
 
-    ax.set_xlabel("Year (future offset)")
-    ax.set_ylabel("Number of anomaly months")
-    ax.set_title(f"{selected_state} — {selected_scenario}")
+    # -----------------------------
+    # FORECAST MEAN
+    # -----------------------------
+    ax.plot(
+        result["year"],
+        result["mean_anomalies"],
+        label="Predicted mean",
+        color="blue"
+    )
 
+    # -----------------------------
+    # UNCERTAINTY BAND
+    # -----------------------------
+    ax.fill_between(
+        result["year"],
+        result["lower"],
+        result["upper"],
+        color="blue",
+        alpha=0.2,
+        label="Prediction uncertainty (±1 std)"
+    )
+
+    # -----------------------------
+    # STYLE
+    # -----------------------------
+    ax.axvline(
+        historic_yearly["year"].max(),
+        linestyle="--",
+        color="grey",
+        label="Forecast start"
+    )
+
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Biodiversity anomaly months")
+    ax.set_title(f"{selected_state} — historical vs forecast")
+
+    ax.legend()
     ax.grid(True)
 
     st.pyplot(fig)
 
     # -----------------------------
-    # 6. Optional: raw table
+    # Optional table
     # -----------------------------
-    with st.expander("Show yearly data"):
-        st.dataframe(yearly)
+    with st.expander("Show simulation results"):
+        st.dataframe(result)
+
+# if st.button("Predict"):
+
+#     st.subheader("Running simulation...")
+
+#     # 1. simulate future climate + features
+#     future_df = simulate_future(
+#         df=full_df.loc[full_df['state']==selected_state],
+#         features = features,
+#         scenario=scenario
+#     )
+
+#     # 2. predict anomalies
+#     preds = forecast_bioshocks(
+#         df = future_df,
+#         model = model,
+#         features = features,
+#         threshold = threshold
+#     )
+
+#     # -----------------------------
+#     # 3. Aggregate per year
+#     # -----------------------------
+#     yearly = (
+#         preds.groupby("year")["biodiversity_anomaly"]
+#         .sum()
+#         .reset_index()
+#     )
+
+#     yearly.rename(
+#         columns={"biodiversity_anomaly": "n_anomalies"},
+#         inplace=True
+#     )
+
+#     total = yearly["n_anomalies"].sum()
+
+#     # -----------------------------
+#     # 4. Output text
+#     # -----------------------------
+#     st.subheader("Results")
+
+#     st.write(
+#         f"**Total predicted anomaly months (10 years): {int(total)}**"
+#     )
+
+#     st.write(
+#         f"Average per year: {total/10:.1f}"
+#     )
+
+#     # -----------------------------
+#     # 5. Plot
+#     # -----------------------------
+#     fig, ax = plt.subplots()
+
+#     ax.plot(
+#         yearly["year"],
+#         yearly["n_anomalies"],
+#         marker="o"
+#     )
+
+#     ax.set_xlabel("Year (future offset)")
+#     ax.set_ylabel("Number of anomaly months")
+#     ax.set_title(f"{selected_state} — {selected_scenario}")
+
+#     ax.grid(True)
+
+#     st.pyplot(fig)
+
+#     # -----------------------------
+#     # 6. Optional: raw table
+#     # -----------------------------
+#     with st.expander("Show yearly data"):
+#         st.dataframe(yearly)
 
 

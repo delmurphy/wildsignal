@@ -304,11 +304,11 @@ def simulate_with_uncertainty(
             df=df.loc[df['state'] == state],
             features = features,
             scenario=scenario,
-            seed=i  # important for variation control (if supported)
+            #seed=i  # important for variation control (if supported)
         )
 
         # 2. predict anomalies
-        preds = forecast_bioshocks(df = sim, model, model = model, features = features, threshold = threshold)
+        preds = forecast_bioshocks(df = sim, model = model, features = features, threshold = threshold)
 
         # 3. aggregate per year
         yearly = preds.groupby("year")["biodiversity_anomaly"].sum()
