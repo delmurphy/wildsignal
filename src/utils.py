@@ -1,3 +1,6 @@
+import pandas as pd
+import numpy as np
+
 def simulate_future(df, features, scenario):
     
     """
@@ -15,11 +18,11 @@ def simulate_future(df, features, scenario):
                 "precipitation change": 0.1
             },
             "middle of the road": {
-                "temp increase":3,
+                "temp increase":4,
                 "precipitation change": 0.2
             },
             "business as usual": {
-                "temp increase":5,
+                "temp increase":7,
                 "precipitation change": 0.3
             },
         }
@@ -31,11 +34,11 @@ def simulate_future(df, features, scenario):
             "precipitation change": 0.1
         },
         "middle of the road": {
-            "temp increase":3,
+            "temp increase":4,
             "precipitation change": 0.2
         },
         "business as usual": {
-            "temp increase":5,
+            "temp increase":7,
             "precipitation change": 0.3
         },
     }
@@ -186,7 +189,7 @@ def simulate_future(df, features, scenario):
     # Calculate lagged features, cyclical months and log_n_obs
     #-----------------------------------------
     #get last 3 months of 2024
-    latest_weather = full_df.loc[(full_df['year']==2024) & (full_df['month']>9)]
+    latest_weather = df.loc[(df['year']==2024) & (df['month']>9)]
 
     #drop columns not needed for model
     #latest_weather = latest_weather[features]
@@ -235,9 +238,10 @@ def simulate_future(df, features, scenario):
     )
 
     #keep year and month in df for later reporting
-    features.extend(['year', 'month'])
+    features_extended = features.copy()
+    features_extended.extend(['year', 'month'])
 
-    future_weather = future_weather[features]
+    future_weather = future_weather[features_extended]
 
     #Remove rows from 2024 (year_offset == 20)
     future_weather = future_weather.loc[future_weather['year_offset']>20]

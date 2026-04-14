@@ -10,3 +10,4 @@ images/
 .vscode/
 *.sqlite*
 .cache/
+src/__pycache__
