@@ -280,3 +280,53 @@ def forecast_bioshocks(df, model, features, threshold):
     df['biodiversity_anomaly'] = (df['proba'] >= threshold).astype(int)
 
     return df
+
+
+
+def simulate_with_uncertainty(
+    df,
+    state,
+    scenario,
+    features,
+    model,
+    threshold,
+    n_runs=50
+):
+    """
+    
+    """
+    all_runs = []
+
+    for i in range(n_runs):
+
+        # 1. simulate weather
+        sim = simulate_future(
+            df=df.loc[df['state'] == state],
+            features = features,
+            scenario=scenario,
+            seed=i  # important for variation control (if supported)
+        )
+
+        # 2. predict anomalies
+        preds = forecast_bioshocks(df = sim, model, model = model, features = features, threshold = threshold)
+
+        # 3. aggregate per year
+        yearly = preds.groupby("year")["biodiversity_anomaly"].sum()
+
+        all_runs.append(yearly.values)
+
+    # convert to array: shape (runs, years)
+    all_runs = np.array(all_runs)
+
+    mean = all_runs.mean(axis=0)
+    std = all_runs.std(axis=0)
+
+    years = np.arange(1, mean.shape[0] + 1)
+
+    return pd.DataFrame({
+        "year": years,
+        "mean_anomalies": mean,
+        "std_anomalies": std,
+        "lower": mean - std,
+        "upper": mean + std
+    })
