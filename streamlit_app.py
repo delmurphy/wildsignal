@@ -83,7 +83,7 @@ SCENARIOS = {
         "precipitation change": 0.2
     },
     "business as usual": {
-        "temp increase": 7,
+        "temp increase": 8,
         "precipitation change": 0.3
     }
 }
@@ -106,6 +106,12 @@ selected_scenario = st.radio(
 )
 
 scenario = selected_scenario
+
+# Simulation length
+sim_length = st.slider(
+    "How long should the simulation run for?",
+    min_value=10, max_value=100, value=50
+)
 
 # -----------------------------
 # Predict button
@@ -145,11 +151,11 @@ if st.button("Predict"):
     st.subheader("Results")
 
     st.write(
-        f"**Expected anomaly months (10 years): {total:.1f} ± {result['std_anomalies'].sum():.1f}**"
+        f"**Expected anomaly months ({sim_length} years): {total:.1f} ± {result['std_anomalies'].sum():.1f}**"
     )
 
     st.write(
-        f"Average per year: {total/10:.1f}"
+        f"Average per year: {total/sim_length:.1f}"
     )
 
     # -----------------------------

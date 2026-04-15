@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-def simulate_future(df, features, scenario):
+def simulate_future(df, features, scenario, sim_length):
     
     """
     Parameters
@@ -26,6 +26,8 @@ def simulate_future(df, features, scenario):
                 "precipitation change": 0.3
             },
         }
+    sim_length : num
+        how many years to simulate into the future
     """
 
     SCENARIOS = {
@@ -58,9 +60,8 @@ def simulate_future(df, features, scenario):
         precip_baseline = ('baseline_precip', 'max')
     ).reset_index()
 
-    # expand baseline df to 10 years 
-    #future_weather = pd.concat([baseline] * 10, ignore_index=True)
-    dfs = [baseline.assign(future_year_offset=i) for i in range(1, 11)]
+    # expand baseline df to sim_length years 
+    dfs = [baseline.assign(future_year_offset=i) for i in range(1, sim_length+1)]
     future_weather = pd.concat(dfs, ignore_index=True)
 
     # Set projected temp & precip change by 2100
@@ -75,7 +76,7 @@ def simulate_future(df, features, scenario):
     # calculate future temps with random noise (increasing noise variability over time)
     future_weather['simulated_temp'] = (future_weather['temp_baseline'] 
                                 + (yearly_temp_increase * future_weather['future_year_offset'])
-                                + np.random.normal(0, 0.5 + 0.01 * future_weather['future_year_offset'], 
+                                + np.random.normal(0, 0.5 + 0.05 * future_weather['future_year_offset'], 
                                                     size=len(future_weather)))
 
     # calculate z-scores based on baseline data
@@ -105,7 +106,7 @@ def simulate_future(df, features, scenario):
         * (1 + future_weather['seasonal_precip'])
         * np.exp(np.random.normal(
             0,
-            0.15 + 0.01 * future_weather['future_year_offset'],  # slightly reduced base noise
+            0.15 + 0.05 * future_weather['future_year_offset'],  # slightly reduced base noise
             size=len(future_weather)
         ))
     ).clip(lower=0)
@@ -123,13 +124,6 @@ def simulate_future(df, features, scenario):
     )
 
 
-    # note for precipitation, calculate relative anomaly (e.g. 40% wetter/drier than normal)
-    future_weather['precip_anomaly'] = ((future_weather['simulated_precip'] - future_weather['precip_baseline'])
-                                        / future_weather['precip_baseline'])
-    future_weather['precip_anom_z'] = ((future_weather['precip_anomaly'] - future_weather['precip_anom_mean'])
-                                    / future_weather['precip_anom_std'])
-
-
     # ---------------------------------------
     # Simulate future drought risk
     #---------------------------------------
@@ -139,9 +133,10 @@ def simulate_future(df, features, scenario):
     # ---------------------------------------
     # Simulate future hot days per month
     #---------------------------------------
-    baseline_hot_days = df.loc[df['year']==2024, ['state', 'month', 'n_hot_days']]
+    #baseline_hot_days = df.loc[df['year']==2024, ['state', 'month', 'n_hot_days']]
+    baseline_hot_days = df.groupby(['state', 'month'])['n_hot_days'].mean().reset_index()
     baseline_hot_days = baseline_hot_days.rename(columns={'n_hot_days': 'baseline_hot_days'})
-    hot_day_sensitivity = 3 # extra hot days per +1°C
+    hot_day_sensitivity = 5 # extra hot days per +1°C
     future_weather = future_weather.merge(baseline_hot_days)
     # Seasonal pattern (more likely to have hot days in summer than winter, increasing in severity with time)
     # amplify summer hot days and suppress winter hot days
@@ -157,7 +152,7 @@ def simulate_future(df, features, scenario):
             + hot_day_sensitivity * (future_weather['temp_anomaly']) #using simulated temp here takes account of long-term trend
         )
         * season_weight
-        + np.random.normal(0, 0.3 + 0.01 * future_weather['future_year_offset'], 
+        + np.random.normal(0, 0.3 + 0.05 * future_weather['future_year_offset'], 
                                                     size=len(future_weather))
     ).clip(0, 31).round()
 
@@ -175,13 +170,16 @@ def simulate_future(df, features, scenario):
     rain_sensitivity = 12  # higher for more extreme effects - wetter winters, drier summers
     noise = np.random.normal(
         0,
-        0.1 * (0.5 + rain_season_weight),  # more variability in wetter months
+        (0.2 + 0.02 * future_weather['future_year_offset'])  # grows over time
+        * (0.5 + rain_season_weight),
         len(future_weather)
     )
+    year_trend = 0.1 * future_weather['future_year_offset'] 
 
     future_weather['heavy_rain_days'] = (
         future_weather['baseline_rain_days']
-        + rain_sensitivity * future_weather['precip_anomaly'] * rain_season_weight
+        + rain_sensitivity * (future_weather['precip_anomaly'] ** 1.3) * rain_season_weight
+        + year_trend
         + noise
     ).clip(0, 31).round()
 
@@ -290,6 +288,7 @@ def simulate_with_uncertainty(
     features,
     model,
     threshold,
+    sim_length = 50,
     n_runs=50
 ):
     """
@@ -304,6 +303,7 @@ def simulate_with_uncertainty(
             df=df.loc[df['state'] == state],
             features = features,
             scenario=scenario,
+            sim_length = sim_length,
             #seed=i  # important for variation control (if supported)
         )
 
