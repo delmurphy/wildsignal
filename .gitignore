@@ -2,7 +2,15 @@
 Data/Raw/*
 Data/Processed/*
 !Data/Processed/full_df.parquet
+!Data/Raw/2_hoch.geo.json
 
+# Old Notebooks
+Notebooks/5a.Model_pipeline_classification.ipynb
+Notebooks/5.1a.Model_pipeline_regression_climateonly.ipynb
+
+# Old models
+models/*
+!models/production_model_regression.pkl
 # Presentation images
 images/
 
@@ -11,3 +19,7 @@ images/
 *.sqlite*
 .cache/
 src/__pycache__
+
+# Old apps
+regression_climateonly_app.py
+classification_app.py
