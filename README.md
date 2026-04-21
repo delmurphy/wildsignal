@@ -1,5 +1,7 @@
 # 🌿 WildSignal - Biodiversity and Climate Change in Germany
 
+🌐 **Live Demo:** [Try the interactive app](https://wildsignal.streamlit.app)
+
 Final project for WBS data science bootcamp. A machine learning model that predicts biodiversity (in)stability in response to extreme weather events in Germany.
 
 ## Overview
