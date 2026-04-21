@@ -34,26 +34,15 @@ def simulate_future(df, features, scenario, sim_length):
         ['state', 'future_year_offset', 'month']
     ).reset_index(drop=True)
 
-    # # ---------------------------------------
-    # # 🔥 SHOCK PROCESS (NEW)
-    # # ---------------------------------------
-    # n = len(future_weather)
-
-    # # rare extreme events (~3% chance)
-    # shock_flag = np.random.binomial(1, 0.03, n)
-
-    # # size of shocks
-    # temp_shock = shock_flag * np.random.normal(2, 1, n)   # heat spikes
-    # precip_shock = shock_flag * np.random.normal(0.5, 0.3, n)  # wet or dry swings
 
     # ---------------------------------------
-    # CORRELATED SHOCKS (NEW)
+    # GENERATE CORRELATED WEATHER SHOCKS
     # ---------------------------------------
 
     n = len(future_weather)
 
-    # probability of shock (we'll tune this next)
-    # shock_prob = 0.04
+    # probability of shock 
+    # shock_prob = 0.04 # constant
     # shock_prob = 0.03 + 0.07 * growth # linear increase
     shock_prob = 0.03 + 0.20 * (growth ** 2) # nonlinear increase (acceleration)
     shock_flag = np.random.binomial(1, shock_prob, n)
@@ -76,14 +65,8 @@ def simulate_future(df, features, scenario, sim_length):
     precip_shock[wet_idx] = np.random.normal(0.8, 0.3, wet_idx.sum())     # very wet
 
     # ---------------------------------------
-    # SHOCK PERSISTENCE (NEW)
+    # SHOCK PERSISTENCE
     # ---------------------------------------
-
-    # for i in range(1, n):
-    #     if shock_flag[i-1] == 1 and np.random.rand() < 0.5:
-    #         shock_flag[i] = 1
-    #         temp_shock[i] += temp_shock[i-1] * 0.6
-    #         precip_shock[i] += precip_shock[i-1] * 0.6
 
     for state in future_weather['state'].unique():
         idx = np.where(future_weather['state'] == state)[0]
@@ -106,7 +89,7 @@ def simulate_future(df, features, scenario, sim_length):
         future_weather['temp_baseline']
         + yearly_temp_increase * future_weather['future_year_offset']
         + np.random.normal(0, 0.2 + 0.02 * future_weather['future_year_offset'], n)
-        + temp_shock   # 🔥 add shock
+        + temp_shock   #  add shock
     )
 
     future_weather['temp_anomaly'] = base_temp - future_weather['temp_baseline']
@@ -132,7 +115,7 @@ def simulate_future(df, features, scenario, sim_length):
 
     base_precip = (
         future_weather['precip_baseline']
-        * (1 + mean_drift + seasonal_component + precip_shock)  # 🔥 add shock
+        * (1 + mean_drift + seasonal_component + precip_shock)  # add shock
         * np.exp(np.random.normal(0, noise_scale, n))
     ).clip(lower=0)
 
@@ -149,7 +132,7 @@ def simulate_future(df, features, scenario, sim_length):
     ).clip(-5, 10)
 
     # ---------------------------------------
-    # 🔥 PERSISTENCE (NEW)
+    # PERSISTENCE
     # ---------------------------------------
     for col in ['temp_anom_z', 'precip_anom_z']:
         future_weather[col] = (
@@ -210,13 +193,9 @@ def simulate_future(df, features, scenario, sim_length):
 
     rain_season = (0.5 + 0.5 * np.cos(2 * np.pi * (future_weather['month'] - 1) / 12)) ** 2
 
-    # rain_signal = (
-    #     10 * future_weather['precip_anomaly'] * rain_season * growth
-    # )
-
     rain_signal = (
     12
-    * (future_weather['precip_anomaly'] + precip_shock)  # 🔥 link to shocks
+    * (future_weather['precip_anomaly'] + precip_shock)  # link to shocks
     * rain_season
     * growth
 )
@@ -295,57 +274,7 @@ def simulate_future(df, features, scenario, sim_length):
     return future_weather
 
 
-def forecast_bioshocks(df, model, features, threshold, freeze_year=True):
-
-    X = df[features].copy()
-
-    if freeze_year and 'year_offset' in X.columns:
-        # freeze to last observed value (e.g. 2024 = 20)
-        X['year_offset'] = 20
-
-    proba = model.predict_proba(X)[:, 1]
-
-    df['proba'] = proba
-    df['biodiversity_anomaly'] = (proba >= threshold).astype(int)
-
-    return df
-
-# def forecast_bioshocks(df, model, features, threshold):
-#     """
-#     Apply the model to the future weather data simulated with simulate_future() to predict biodiversity anomalies
-#     Return df with model predictions as proba values and presence/absence biodiversity_anomaly based on proba threshold
-
-#     Parameters
-#     ----------
-#     df : pandas DataFrame
-#         the simulated future weather dataframe returned by simulate_future()
-#     model : the trained classification model
-#     features : list
-#         a list of the feature names that were used to train the model
-#     threshold : float
-#         the optimised threshold for proba values (saved in the trained model bundle)
-    
-#     """
-
-#     # Dataframe with only necessary features
-#     X = df[features]
-
-#     # Predict probability
-#     proba = model.predict_proba(X)[:, 1]
-
-#     #add predictions to df
-#     df['proba'] = proba
-#     df['biodiversity_anomaly'] = (df['proba'] >= threshold).astype(int)
-
-#     return df
-
 def forecast_biodiversity(df, model, features, freeze_year=True):
-
-    # df['int1'] = df['temp_anom_z'] * df['precip_anom_z']
-    # df['int2'] = df['temp_anom_z'] * df['n_hot_days']
-    # df['int3'] = df['drought_index'] * df['n_hot_days']
-    # df['temp_anom_z_sq'] = df['temp_anom_z'] ** 2
-    # df['drought_index_sq'] = df['drought_index'] ** 2
 
     X = df[features].copy()
 
@@ -356,124 +285,6 @@ def forecast_biodiversity(df, model, features, freeze_year=True):
 
     return df
 
-
-# def forecast_biodiversity(df, model, features):
-#     """
-#     Apply the model to the future weather data simulated with simulate_future() to predict biodiversity z_score
-
-#     Parameters
-#     ----------
-#     df : pandas DataFrame
-#         the simulated future weather dataframe returned by simulate_future()
-#     model : the trained regression model
-#     features : list
-#         a list of the feature names that were used to train the model
-#     threshold : float
-#         the optimised threshold for proba values (saved in the trained model bundle)
-    
-#     """
-
-#     # Dataframe with only necessary features
-#     X = df[features]
-
-#     # Predict probability
-#     preds = model.predict(X)
-
-#     #add predictions to df
-#     df['pred_biodiv_z'] = preds
-
-#     return df
-
-
-
-def simulate_with_uncertainty(
-    df,
-    state,
-    scenario,
-    features,
-    model,
-    threshold,
-    sim_length = 50,
-    n_runs=50
-):
-    """
-    
-    """
-    all_runs = []
-
-    for i in range(n_runs):
-
-        # 1. simulate weather
-        sim = simulate_future(
-            df=df.loc[df['state'] == state],
-            features = features,
-            scenario=scenario,
-            sim_length = sim_length,
-            #seed=i  # important for variation control (if supported)
-        )
-
-        # 2. predict anomalies
-        preds = forecast_bioshocks(df = sim, model = model, features = features, threshold = threshold)
-
-        # 3. aggregate per year
-        yearly = preds.groupby("year")["biodiversity_anomaly"].sum()
-
-        all_runs.append(yearly.values)
-
-    # convert to array: shape (runs, years)
-    all_runs = np.array(all_runs)
-
-    mean = all_runs.mean(axis=0)
-    std = all_runs.std(axis=0)
-
-    years = np.arange(1, mean.shape[0] + 1)
-
-    return pd.DataFrame({
-        "year": years,
-        "mean_anomalies": mean,
-        "std_anomalies": std,
-        "lower": mean - std,
-        "upper": mean + std
-    })
-
-
-def simulate_with_uncertainty_debug(
-    df,
-    state,
-    scenario,
-    features,
-    model,
-    threshold,
-    sim_length=50,
-    n_runs=10
-):
-
-    all_preds = []
-
-    for i in range(n_runs):
-
-        # 1. simulate weather
-        sim = simulate_future(
-            df=df.loc[df['state'] == state],
-            features=features,
-            scenario=scenario,
-            sim_length=sim_length,
-        )
-
-        # 2. predict anomalies
-        preds = forecast_bioshocks(
-            df=sim,
-            model=model,
-            features=features,
-            threshold=threshold
-        )
-
-        # store full monthly predictions
-        preds["run"] = i
-        all_preds.append(preds)
-
-    # combine everything
-    return pd.concat(all_preds, ignore_index=True)
 
 
 def simulate_with_uncertainty_regression(
