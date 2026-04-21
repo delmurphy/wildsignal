@@ -7,6 +7,8 @@ Data/Processed/*
 # Old Notebooks
 Notebooks/5a.Model_pipeline_classification.ipynb
 Notebooks/5.1a.Model_pipeline_regression_climateonly.ipynb
+Notebooks/7.Streamlit_app.ipynb
+Notebooks/6.Simulate_future.ipynb
 
 # Old models
 models/*
