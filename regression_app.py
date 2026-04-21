@@ -65,50 +65,21 @@ st.caption(
 st.write("Simulate biodiversity changes under climate scenarios.")
 
 
+# -----------------------------
 # State selection
-# states = full_df['state'].unique()
-# selected_state = st.selectbox("Select Bundesland", states)
+# -----------------------------
 
-# ---------------------------------------
-# NORMALIZATION
-# ---------------------------------------
+### Function to normalise state names in df and geojson
 def norm(x):
     x = unicodedata.normalize("NFKC", str(x))
     x = re.sub(r"\s+", " ", x)
     return x.strip().lower()
 
-# ---------------------------------------
-# LOAD GEOJSON
-# ---------------------------------------
+### Load geojson
 with open("Data/Raw/2_hoch.geo.json", "r", encoding="utf-8") as f:
     geojson = json.load(f)
 
-# ---------------------------------------
-# GEOMETRY SAFETY (minimal)
-# ---------------------------------------
-def fix_geometry(geom):
-    if not geom.is_valid:
-        geom = geom.buffer(0)
-    geom = geom.simplify(0.0002, preserve_topology=True)
-    return geom if not geom.is_empty else None
-
-clean_features = []
-for f in geojson["features"]:
-    geom = shape(f["geometry"])
-    geom = fix_geometry(geom)
-
-    if geom is None:
-        continue
-
-    f["geometry"] = mapping(geom)
-    f["id"] = f["properties"]["id"]
-    clean_features.append(f)
-
-geojson["features"] = clean_features
-
-# ---------------------------------------
-# LOOKUP TABLES
-# ---------------------------------------
+### Lookup tables for geojson 'name' and 'id'
 state_lookup = {
     norm(f["properties"]["name"]): f["properties"]["id"]
     for f in geojson["features"]
@@ -116,9 +87,7 @@ state_lookup = {
 
 reverse_lookup = {v: k for k, v in state_lookup.items()}
 
-# ---------------------------------------
-# DATA PREP
-# ---------------------------------------
+### prep data
 df_map = full_df.copy()
 df_map["state_norm"] = df_map["state"].apply(norm)
 df_map["state_id"] = df_map["state_norm"].map(state_lookup)
@@ -128,16 +97,12 @@ df_map = df_map.groupby(["state", "state_id"]).size().reset_index(name="value")
 
 df_map["state_id"] = df_map["state_id"].astype(str)
 
-# ---------------------------------------
-# SESSION STATE
-# ---------------------------------------
+# clear selected state
 if "selected_state" not in st.session_state:
     st.session_state.selected_state = None
 
-# ---------------------------------------
-# CREATE COLOUR SCALE FOR STATES
-# ---------------------------------------
 
+### Create colour scale for states
 # unique states
 state_ids = df_map["state_id"].unique()
 
@@ -163,9 +128,7 @@ for i, color in enumerate(greens_hex):
     colorscale.append([i/n, color])
     colorscale.append([(i+1)/n, color])
 
-# ---------------------------------------
-# BASE MAP
-# ---------------------------------------
+### Create base map
 fig = go.Figure()
 
 # base layer
@@ -187,9 +150,8 @@ fig.add_trace(
     )
 )
 
-# ---------------------------------------
-# SELECTED STATE HIGHLIGHT
-# ---------------------------------------
+### Highlight selected state
+
 if st.session_state.selected_state:
     selected = df_map[df_map["state_id"] == st.session_state.selected_state]
 
@@ -207,9 +169,7 @@ if st.session_state.selected_state:
         )
     )
 
-# ---------------------------------------
-# LAYOUT
-# ---------------------------------------
+### map layout
 fig.update_layout(
     mapbox=dict(
         style="carto-positron",
@@ -220,9 +180,7 @@ fig.update_layout(
     clickmode="event+select"
 )
 
-# ---------------------------------------
-# RENDER WITH CLICK EVENTS
-# ---------------------------------------
+### click events
 event = st.plotly_chart(
     fig,
     use_container_width=True,
@@ -230,9 +188,6 @@ event = st.plotly_chart(
     on_select="rerun"
 )
 
-# ---------------------------------------
-# CLICK HANDLING (THIS IS THE KEY FIX)
-# ---------------------------------------
 if event and hasattr(event, "selection") and event.selection:
     try:
         clicked_id = event.selection["points"][0]["location"]
@@ -240,9 +195,7 @@ if event and hasattr(event, "selection") and event.selection:
     except Exception:
         pass
 
-# ---------------------------------------
-# UI OUTPUT
-# ---------------------------------------
+### UI output
 st.subheader("Selected Bundesland")
 
 if st.session_state.selected_state:
@@ -250,7 +203,6 @@ if st.session_state.selected_state:
 else:
     st.info("Click a state on the map")
 
-# selected_state = st.session_state.selected_state
 
 state_id_to_name = (
     df_map[["state_id", "state"]]
@@ -265,7 +217,9 @@ state_id = st.session_state.selected_state
 selected_state = state_id_to_name.get(state_id)
 
 
+# -----------------------------
 # Scenario selection
+# -----------------------------
 selected_scenario = st.radio(
     "Select Climate Scenario",
     list(SCENARIOS.keys())
@@ -273,13 +227,6 @@ selected_scenario = st.radio(
 
 st.caption("Scenario definitions follow simplified IPCC-style warming pathways.")
 
-# scenario_descriptions = {
-#     "best case": "Low emissions pathway (Paris-aligned). ~1.5°C warming by 2100.",
-#     "middle of the road": "Intermediate emissions scenario. ~3–4°C warming by 2100.",
-#     "business as usual": "High emissions trajectory with limited mitigation. ~6–8°C warming by 2100."
-# }
-
-# st.caption(scenario_descriptions[selected_scenario])
 
 with st.expander("What do these scenarios mean?"):
     st.markdown("""
@@ -292,22 +239,19 @@ with st.expander("What do these scenarios mean?"):
 
 
 
+# -----------------------------
 # Simulation length
+# -----------------------------
 sim_length = st.slider(
     "Simulation horizon (years)",
     min_value=10, max_value=100, value=50
 )
 
-# Number of simulations
-# n_runs = st.slider(
-#     "Number of simulations (uncertainty)",
-#     min_value=10, max_value=200, value=50
-# )
 n_runs = st.slider(
-    "Number of simulations (higher = more stable result)",
+    "Number of simulations (estimate uncertainty of results)",
     min_value=50,
     max_value=200,
-    value=100,
+    value=50,
     step=50
 )
 
@@ -317,18 +261,6 @@ n_runs = st.slider(
 if st.button("Predict"):
 
     st.subheader("Running Monte Carlo simulation...")
-
-    # -----------------------------
-    # HISTORICAL DATA
-    # -----------------------------
-    # historic_yearly = (
-    #     full_df[full_df["state"] == selected_state]
-    #     .groupby("year")["biodiversity_z"]
-    #     .mean()
-    #     .reset_index()
-    # )
-
-    # last_hist_year = historic_yearly["year"].max()
 
     # -----------------------------
     # RECENT BASELINE (last 5 years)
@@ -374,20 +306,12 @@ if st.button("Predict"):
     # -----------------------------
     # SUMMARY METRICS
     # -----------------------------
-    # avg_future = result["mean"].mean()
-    # trend = result["mean"].iloc[-1] - result["mean"].iloc[0]
     avg_future = result["delta"].mean()
     trend = result["delta"].iloc[-1] - result["delta"].iloc[0]
 
     st.subheader("Results")
 
-    #st.write(f"**Average predicted biodiversity turnover z-score:** {avg_future:.2f}")
     st.write(f"**Change over period:** {trend:.2f}")
-
-    # if avg_future < 0:
-    #     st.warning("⚠️ Biodiversity expected to decline below baseline.")
-    # else:
-    #     st.success("✅ Biodiversity remains near or above baseline.")
 
     if trend > 0:
         st.warning("⚠️ Ecological change is expected to increase relative to today.")
@@ -398,32 +322,6 @@ if st.button("Predict"):
     # PLOT
     # -----------------------------
     fig, ax = plt.subplots(figsize=(10, 5))
-
-    # # HISTORICAL
-    # ax.plot(
-    #     historic_yearly["year"],
-    #     historic_yearly["biodiversity_z"],
-    #     marker="o",
-    #     label="Observed (historical)",
-    #     color="black"
-    # )
-
-#     # BASELINE POINT
-#     ax.scatter(
-#         last_hist_year,
-#         0,
-#         color="black",
-#         s=80,
-#         label="Current (recent average)"
-# )
-
-    # # PREDICTED MEAN
-    # ax.plot(
-    #     result["year"],
-    #     result["mean"],
-    #     color="green",
-    #     label="Predicted mean"
-    # )
 
     # color based on direction
     line_color = "red" if result["delta"].mean() > 0 else "blue"
@@ -437,16 +335,6 @@ if st.button("Predict"):
 )
 
 
-    # # UNCERTAINTY BAND
-    # ax.fill_between(
-    #     result["year"],
-    #     result["lower"],
-    #     result["upper"],
-    #     color="green",
-    #     alpha=0.2,
-    #     label="Uncertainty (±1 std)"
-    # )
-
     # UNCERTAINTY BAND
     ax.fill_between(
         result["year"],
@@ -457,26 +345,6 @@ if st.button("Predict"):
         label="Uncertainty"
     )
 
-    # # ZERO LINE (important for z-scores)
-    # ax.axhline(0, linestyle="--", color="grey", alpha=0.7)
-
-    # # add annotation
-    # ax.text(
-    #     last_hist_year + 1,
-    #     0,
-    #     "Current level",
-    #     fontsize=9,
-    #     verticalalignment="bottom"
-    # )
-
-    # FORECAST SPLIT
-    # ax.axvline(
-    #     last_hist_year,
-    #     linestyle="--",
-    #     color="grey",
-    #     label="Forecast start"
-    # )
-
     # Annotate y axis
     ax.set_yticks([])            # remove ticks
     ax.set_yticklabels([])       # remove labels
@@ -486,13 +354,12 @@ if st.button("Predict"):
 
     # --- Top: more unstable ---
     ax.annotate(
-        "More ecological change ↑",
+        "More unstable ↑",
         xy=(1.02, ymax-20), xycoords=('axes fraction', 'data'),
         xytext=(1.02, ymax),
         textcoords=('axes fraction', 'data'),
         ha='left', va='bottom',
         fontsize=14,
-        #arrowprops=dict(arrowstyle='->')
     )
 
     # --- Bottom: more stable ---
@@ -503,18 +370,11 @@ if st.button("Predict"):
         textcoords=('axes fraction', 'data'),
         ha='left', va='top',
         fontsize=14,
-        #arrowprops=dict(arrowstyle='->')
     )
-
-    # Add gradient cue
-    # ax.axhspan(0, ymax, color='red', alpha=0.05)
-    # ax.axhspan(ymin, 0, color='blue', alpha=0.05)
 
     # LABELS
     ax.set_xlabel("Year")
-    # ax.set_ylabel("Biodiversity (z-score)")
-    # ax.set_title(f"{selected_state} — biodiversity trajectory")
-    ax.set_ylabel("Change in ecosystem dynamics")
+    ax.set_ylabel("Biodiversity Instability")
     ax.set_title(f"{selected_state} — projected ecological change")
 
     ax.legend()
