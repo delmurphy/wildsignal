@@ -140,6 +140,7 @@ It provides a visual overview of the analysis, modelling approach, and main resu
 
 
 ## 📁 Project Structure
+```text
 .
 ├── regression_app.py
 ├── Data/
@@ -151,6 +152,7 @@ It provides a visual overview of the analysis, modelling approach, and main resu
 ├── environment.yml
 ├── WildSignal.pdf
 └── README.md
+```
 
 
 ---
